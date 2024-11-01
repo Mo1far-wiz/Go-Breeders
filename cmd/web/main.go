@@ -1,9 +1,9 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
+	"go-breeders/configuration"
 	"html/template"
 	"log"
 	"net/http"
@@ -15,7 +15,8 @@ const port = ":4000"
 type application struct {
 	templateMap map[string]*template.Template
 	config      appConfig
-	DB          *sql.DB
+	App         *configuration.Application
+	CatService  *RemoteService
 }
 
 type appConfig struct {
@@ -37,7 +38,18 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	app.DB = db
+	app.App = configuration.New(db)
+
+	xmlBackend := &XMLBackend{}
+	xmlAdapter := &RemoteService{
+		Remote: xmlBackend,
+	}
+
+	// jsonBackend := &JSONBackend{}
+	// jsonAdapter := &RemoteService{
+	// 	Remote: jsonBackend,
+	// }
+	app.CatService = xmlAdapter
 
 	srv := &http.Server{
 		Addr:              port,
