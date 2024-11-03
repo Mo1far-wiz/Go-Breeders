@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"go-breeders/adapters"
 	"go-breeders/configuration"
+	"go-breeders/streamer"
 	"html/template"
 	"log"
 	"net/http"
@@ -16,7 +18,7 @@ type application struct {
 	templateMap map[string]*template.Template
 	config      appConfig
 	App         *configuration.Application
-	CatService  *RemoteService
+	videoQueue  chan streamer.VideoProcessingJob
 }
 
 type appConfig struct {
@@ -25,8 +27,14 @@ type appConfig struct {
 }
 
 func main() {
+	const numWorkers = 4
+
+	videoQueue := make(chan streamer.VideoProcessingJob, numWorkers)
+	defer close(videoQueue)
+
 	app := application{
 		templateMap: make(map[string]*template.Template),
+		videoQueue:  videoQueue,
 	}
 
 	flag.BoolVar(&app.config.useCache, "cache", false, "Use template cache")
@@ -38,18 +46,16 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	app.App = configuration.New(db)
 
-	xmlBackend := &XMLBackend{}
-	xmlAdapter := &RemoteService{
+	xmlBackend := &adapters.XMLBackend{}
+	xmlAdapter := &adapters.RemoteService{
 		Remote: xmlBackend,
 	}
 
-	// jsonBackend := &JSONBackend{}
-	// jsonAdapter := &RemoteService{
-	// 	Remote: jsonBackend,
-	// }
-	app.CatService = xmlAdapter
+	app.App = configuration.New(db, xmlAdapter)
+
+	wp := streamer.New(videoQueue, numWorkers)
+	wp.Run()
 
 	srv := &http.Server{
 		Addr:              port,

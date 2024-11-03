@@ -3,7 +3,9 @@ package pets
 import (
 	"errors"
 	"fmt"
+	"go-breeders/configuration"
 	"go-breeders/models"
+	"log"
 )
 
 type AnimalInterface interface {
@@ -28,6 +30,7 @@ func (cff *CatFromFactory) Show() string {
 
 type PetFactoryInterface interface {
 	newPet() AnimalInterface
+	newPetWithBreed(breed string) AnimalInterface
 }
 
 type DogAbstractFactory struct{}
@@ -38,11 +41,38 @@ func (df *DogAbstractFactory) newPet() AnimalInterface {
 	}
 }
 
+func (df *DogAbstractFactory) newPetWithBreed(breed string) AnimalInterface {
+	app := configuration.GetInstance()
+	dogBreed, _ := app.Models.DogBreed.GetBreedByName(breed)
+
+	return &DogFromFactory{
+		Pet: &models.Dog{
+			Breed: *dogBreed,
+		},
+	}
+}
+
 type CatAbstractFactory struct{}
 
 func (cf *CatAbstractFactory) newPet() AnimalInterface {
 	return &CatFromFactory{
 		Pet: &models.Cat{},
+	}
+}
+
+func (cf *CatAbstractFactory) newPetWithBreed(breed string) AnimalInterface {
+	// get breed for cat
+	app := configuration.GetInstance()
+	catBreed, err := app.CatService.Remote.GetCatBreedByName(breed)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+
+	return &CatFromFactory{
+		Pet: &models.Cat{
+			Breed: *catBreed,
+		},
 	}
 }
 
@@ -62,4 +92,19 @@ func NewPetFromAbstractFactory(species string) (AnimalInterface, error) {
 		return nil, errors.New("invalid species supplied")
 	}
 
+}
+
+func NewPetWithBreedFromAbstractFactory(species, breed string) (AnimalInterface, error) {
+	switch species {
+	case "dog":
+		var dogFactory DogAbstractFactory
+		dog := dogFactory.newPetWithBreed(breed)
+		return dog, nil
+	case "cat":
+		var catFactory CatAbstractFactory
+		cat := catFactory.newPetWithBreed(breed)
+		return cat, nil
+	default:
+		return nil, errors.New("invalid species supplied")
+	}
 }
